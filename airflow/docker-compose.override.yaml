@@ -1,0 +1,69 @@
+# Servicos do projeto, somados ao docker-compose.yaml oficial do Apache Airflow.
+# O Compose le este arquivo automaticamente junto com o oficial.
+#
+#   oltp-mssql      origem: SQL Server com a base AdventureWorks2022
+#   oltp-restaurar  servico de uma so execucao: baixa e restaura o backup oficial
+#   dw-postgres     destino: PostgreSQL 16 com o Data Warehouse
+services:
+  oltp-mssql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: Express
+      MSSQL_SA_PASSWORD: ${OLTP_SA_PASSWORD}
+      MSSQL_MEMORY_LIMIT_MB: "1536"
+    volumes:
+      - oltp-dados:/var/opt/mssql
+      - oltp-backup:/var/opt/mssql/backup
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -Q 'SELECT 1' -b -o /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    restart: always
+
+  oltp-restaurar:
+    image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:3.3.2}
+    entrypoint: ["python", "/oltp/restaurar_adventureworks.py"]
+    user: "0:0"
+    environment:
+      OLTP_SA_PASSWORD: ${OLTP_SA_PASSWORD}
+    volumes:
+      - ../oltp:/oltp:ro
+      - oltp-backup:/backup
+    depends_on:
+      oltp-mssql:
+        condition: service_healthy
+    restart: "no"
+
+  dw-postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${DW_USER}
+      POSTGRES_PASSWORD: ${DW_PASSWORD}
+      POSTGRES_DB: ${DW_DATABASE}
+      # Locale deterministico: ORDER BY e agregacoes iguais em qualquer maquina.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+      TZ: America/Sao_Paulo
+    ports:
+      - "5434:5432"
+    volumes:
+      - dw-dados:/var/lib/postgresql/data
+      # Executados uma unica vez, na primeira subida (volume vazio).
+      - ../sql/01_ddl_dw.sql:/docker-entrypoint-initdb.d/01_ddl_dw.sql:ro
+      - ../sql/02_comentarios.sql:/docker-entrypoint-initdb.d/02_comentarios.sql:ro
+      - ../sql/03_kpis.sql:/docker-entrypoint-initdb.d/03_kpis.sql:ro
+      - ../sql:/sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: always
+
+volumes:
+  oltp-dados:
+  oltp-backup:
+  dw-dados:

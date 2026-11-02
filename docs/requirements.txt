@@ -1,0 +1,5 @@
+matplotlib
+pillow
+playwright
+psycopg[binary]
+python-docx

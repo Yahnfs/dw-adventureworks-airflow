@@ -1,0 +1,4 @@
+# Os scripts rodam em conteineres Linux: mantem LF mesmo em clones no Windows.
+* text=auto eol=lf
+*.png binary
+*.docx binary

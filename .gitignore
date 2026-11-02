@@ -1,0 +1,12 @@
+# Credenciais e chaves locais
+.env
+
+# Gerados pelo Airflow em execucao
+airflow/logs/
+airflow/plugins/
+airflow/config/
+__pycache__/
+*.pyc
+
+# Temporarios do Word
+~$*
